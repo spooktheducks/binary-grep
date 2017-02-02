@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"path"
@@ -78,19 +79,36 @@ func find(filename string, bytePattern []byte, procLimiter chan struct{}, chResu
 
 	basename := path.Base(filename)
 
-	fileData, err := ioutil.ReadFile(filename)
+	f, err := os.Open(filename)
 	if err != nil {
 		panic(err)
 	}
+	defer f.Close()
 
-	idx := 0
-	for searchStart := 0; searchStart < len(fileData)-len(bytePattern); searchStart += idx + len(bytePattern) {
-		idx = bytes.Index(fileData[searchStart:], bytePattern)
-		if idx == -1 {
-			break
+	for {
+		buf := make([]byte, 1024*1024*1024)
+		n, err := f.Read(buf)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			panic(err)
 		}
 
-		chResults <- result{filename: basename, offset: idx + searchStart, fileData: fileData}
+		idx := 0
+		for searchStart := 0; searchStart < n-len(bytePattern); searchStart += idx + len(bytePattern) {
+			idx = bytes.Index(buf[searchStart:], bytePattern)
+			if idx == -1 {
+				break
+			}
+
+			chResults <- result{filename: basename, offset: idx + searchStart, fileData: buf}
+		}
+
+		_, err = f.Seek(-int64(len(bytePattern)), 1)
+		if err != nil {
+			panic(err)
+		}
 	}
 }
 
