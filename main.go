@@ -61,7 +61,7 @@ func main() {
 
 type result struct {
 	filename string
-	offset   int
+	offset   int64
 	fileData []byte
 }
 
@@ -85,14 +85,23 @@ func find(filename string, bytePattern []byte, procLimiter chan struct{}, chResu
 	}
 	defer f.Close()
 
-	for {
-		buf := make([]byte, 1024*1024*1024)
+	stat, err := f.Stat()
+	if err != nil {
+		panic(err)
+	}
+	filesize := stat.Size()
+
+	var fileOffset int64
+	for fileOffset+int64(len(bytePattern)) < filesize {
+		buf := make([]byte, 1024*1024)
 		n, err := f.Read(buf)
 		if err != nil {
 			if err == io.EOF {
 				break
 			}
 			panic(err)
+		} else if n == 0 {
+			break
 		}
 
 		idx := 0
@@ -102,10 +111,10 @@ func find(filename string, bytePattern []byte, procLimiter chan struct{}, chResu
 				break
 			}
 
-			chResults <- result{filename: basename, offset: idx + searchStart, fileData: buf}
+			chResults <- result{filename: basename, offset: fileOffset + int64(idx+searchStart), fileData: buf}
 		}
 
-		_, err = f.Seek(-int64(len(bytePattern)), 1)
+		fileOffset, err = f.Seek(-int64(len(bytePattern)), 1)
 		if err != nil {
 			panic(err)
 		}
@@ -114,7 +123,7 @@ func find(filename string, bytePattern []byte, procLimiter chan struct{}, chResu
 
 func carve(r result) {
 	filename := fmt.Sprintf("%s-%d.%s", r.filename, r.offset, *carveExt)
-	err := ioutil.WriteFile(filename, r.fileData[r.offset:r.offset+int(*carveLen)], 0666)
+	err := ioutil.WriteFile(filename, r.fileData[r.offset:r.offset+int64(*carveLen)], 0666)
 	if err != nil {
 		panic(err)
 	}
