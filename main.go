@@ -147,13 +147,17 @@ func getArgs() (string, []string) {
 
 	pattern := args[0]
 
-	glob := args[1]
-	homeDir := os.Getenv("HOME")
-	glob = strings.Replace(glob, "~", homeDir, 1)
+	globs := args[1:]
+	filenames := []string{}
+	for _, glob := range globs {
+		homeDir := os.Getenv("HOME")
+		glob = strings.Replace(glob, "~", homeDir, 1)
 
-	filenames, err := filepath.Glob(glob)
-	if err != nil {
-		panic(err)
+		fns, err := filepath.Glob(glob)
+		if err != nil {
+			panic(err)
+		}
+		filenames = append(filenames, fns...)
 	}
 
 	return pattern, filenames
